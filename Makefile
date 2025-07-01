@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------- #
 
 cc        := g++
-so_name   := trt_pipeline.so
+so_name   := thread_pipeline.so
 pro_name  := pro
 workdir   := workspace
 srcdir    := src

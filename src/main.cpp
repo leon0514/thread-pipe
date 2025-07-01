@@ -4,7 +4,7 @@
 #include <thread>
 #include <memory>
 
-#include "ThreadWrapper/TaskManager.hpp"
+#include "Task/TaskManager.hpp"
 
 #include "ThreadWrapper/ThreadWrapperApp.hpp"
 #include "TestThread/ProducerThread.hpp"
