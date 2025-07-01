@@ -4,14 +4,13 @@
 #include <memory>
 #include <thread>
 #include <string>
-#include <future> // OPTIMIZED: For signaling init completion.
-#include <atomic> // OPTIMIZED: For thread-safe status updates.
+#include <future>
+#include <atomic>
 
 #include "ThreadWrapper/ThreadSafeQueue.hpp"
 #include "ThreadWrapper/ThreadWrapper.hpp"
 #include "ThreadWrapper/ThreadWrapperMessage.hpp"
 
-// OPTIMIZED: Scoped enum for status, now atomic.
 enum class ThreadWrapperStatus {
     READY,
     RUNNING,

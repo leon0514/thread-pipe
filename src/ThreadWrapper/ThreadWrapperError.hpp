@@ -1,9 +1,6 @@
 #ifndef THREAD_WRAPPER_ERROR_HPP
 #define THREAD_WRAPPER_ERROR_HPP
 
-// 不再需要 <unistd.h>，因为它与错误码的定义无关
-
-// 使用 enum class 来避免命名冲突，并提供强类型检查
 enum class ThreadWrapperError {
     OK = 0,
     ERROR = 1,

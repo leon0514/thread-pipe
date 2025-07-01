@@ -29,9 +29,9 @@ public:
      * @brief Initializes the thread-specific resources. Called once when the thread starts.
      * @return 0 on success, non-zero on failure.
      */
-    virtual int initialize()
+    virtual ThreadWrapperError initialize()
     {
-        return 0;
+        return ThreadWrapperError::OK;
     }
 
     /**
@@ -40,7 +40,7 @@ public:
      * @param msg_data A shared pointer to the message data.
      * @return 0 on success, non-zero on failure (which will terminate the thread).
      */
-    virtual int process(int msgId, std::shared_ptr<void> msg_data) = 0;
+    virtual ThreadWrapperError process(int msgId, std::shared_ptr<void> msg_data) = 0;
 
     /// @brief Gets the unique ID assigned to this thread instance.
     int self_instance_id() const noexcept
@@ -54,14 +54,13 @@ public:
         return instance_name_;
     }
 
-    // OPTIMIZED: Renamed to configure() for clarity. This is an internal method called by the framework.
     ThreadWrapperError configure(int instance_id, const std::string& thread_name, int device_id);
 
 private:
     int instance_id_ = INVALID_INSTANCE_ID;
     std::string instance_name_;
     bool configured_ = false;
-    int device_id_ = 0; // Set but not used in this example; available for user extension.
+    int device_id_ = 0;
 };
 
 

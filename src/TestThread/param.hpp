@@ -1,18 +1,24 @@
 #ifndef PARAM_HPP
 #define PARAM_HPP
 
-namespace
-{
-    const int MSG_APP_START = 1;
-    const int MSG_CREATE = 2;
-    const int MSG_ADD = 3;
-}
+#include <vector>
+#include <string>
+#include <cstdint>
+#include <memory>
 
-struct Message
+// 使用 enum class 增强类型安全和代码清晰度
+enum class MessageId {
+    APP_START = 1,
+    CREATE_PIPELINE_MSG = 2,
+    PROCESS_PIPELINE_MSG = 3,
+};
+
+// 消息体，包含路由信息和数据
+// 命名更具体，反映其在管道中的作用
+struct PipelineMessage
 {
-    // 线程发送消息顺序
-    std::vector<std::string> call_thread_name_list_;
+    std::vector<std::string> routing_slip;
     uint32_t value;
 };
 
-#endif
+#endif // PARAM_HPP

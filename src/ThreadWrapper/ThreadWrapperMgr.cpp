@@ -30,7 +30,7 @@ void ThreadWrapperMgr::join_thread()
     }
 }
 
-// 优化：采用“毒丸”模式，彻底修复死锁问题
+// 采用“毒丸”模式，修复死锁问题
 void ThreadWrapperMgr::thread_entry()
 {
     if (!thread_instance_) {
@@ -38,7 +38,7 @@ void ThreadWrapperMgr::thread_entry()
         return;
     }
 
-    if (thread_instance_->initialize() != 0) {
+    if (thread_instance_->initialize() != ThreadWrapperError::OK) {
         set_status(ThreadWrapperStatus::ERROR);
         init_promise_.set_value(false);
         return;
@@ -47,20 +47,17 @@ void ThreadWrapperMgr::thread_entry()
     set_status(ThreadWrapperStatus::RUNNING);
     init_promise_.set_value(true);
 
-    // 优化：循环条件改为 true，退出逻辑由“毒丸”消息控制
     while (true) {
         std::shared_ptr<ThreadWrapperMessage> msg;
-        msg_queue_.wait_and_pop(msg); // 阻塞等待消息
+        msg_queue_.wait_and_pop(msg);
 
-        // 优化：检查是否收到了“毒丸”(nullptr)，如果是，则退出循环
         if (!msg) {
             break; 
         }
 
-        // 正常处理消息
-        if (thread_instance_->process(msg->msg_id, msg->data) != 0) {
+        if (thread_instance_->process(msg->msg_id, msg->data) != ThreadWrapperError::OK) {
             set_status(ThreadWrapperStatus::ERROR);
-            break; // 业务处理出错也退出
+            break;
         }
     }
 

@@ -80,17 +80,15 @@ void ThreadWrapperApp::stop()
 
 void ThreadWrapperApp::release_threads()
 {
-    // 仅向工作线程发送停止信号
     for (size_t i = MAIN_THREAD_ID + 1; i < thread_mgr_list_.size(); ++i) 
     {
-        if (thread_mgr_list_[i] && thread_mgr_list_[i]->get_status() == ThreadWrapperStatus::RUNNING) {
+        if (thread_mgr_list_[i] && thread_mgr_list_[i]->get_status() == ThreadWrapperStatus::RUNNING) 
+        {
             thread_mgr_list_[i]->set_status(ThreadWrapperStatus::EXITING);
-            // 优化：推送 nullptr 作为“毒丸”，以唤醒并终止线程
             thread_mgr_list_[i]->push_message_to_queue(nullptr);
         }
     }
 
-    // 等待所有工作线程执行完毕
     for (size_t i = MAIN_THREAD_ID + 1; i < thread_mgr_list_.size(); ++i) 
     {
         if (thread_mgr_list_[i]) 
@@ -99,7 +97,6 @@ void ThreadWrapperApp::release_threads()
         }
     }
 
-    // 清理资源，unique_ptr 会自动删除管理器对象
     thread_mgr_list_.clear();
 }
 
@@ -125,7 +122,8 @@ int ThreadWrapperApp::create_thread_wrapper_mgr(
 
 bool ThreadWrapperApp::is_name_unique(const std::string& thread_name) const
 {
-    if (thread_name.empty()) {
+    if (thread_name.empty()) 
+    {
         return false;
     }
     for (const auto& mgr : thread_mgr_list_) 

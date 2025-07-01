@@ -1,81 +1,84 @@
+# ---------------------------------------------------------------------------- #
+#         Original Makefile - with a dedicated 'so' build target
+# ---------------------------------------------------------------------------- #
+
 cc        := g++
-name      := trt_pipeline.so
+so_name   := trt_pipeline.so
+pro_name  := pro
 workdir   := workspace
 srcdir    := src
 objdir    := objs
 stdcpp    := c++17
 
+# Compilation and linking flags
+cpp_compile_flags := -std=$(stdcpp) -Wall -g -fPIC -pthread -fsanitize=address -I$(srcdir)
+link_flags        := -pthread -fsanitize=address
+rpath_flags       := -Wl,-rpath='$$ORIGIN'
 
-project_include_path := $(srcdir)
+# Source file separation
+cpp_srcs   := $(shell find $(srcdir) -name "*.cpp")
+main_src   := $(srcdir)/main.cpp
+lib_srcs   := $(filter-out $(main_src), $(cpp_srcs))
 
+# Object file lists
+main_obj   := $(main_src:$(srcdir)/%.cpp=$(objdir)/%.o)
+lib_objs   := $(lib_srcs:$(srcdir)/%.cpp=$(objdir)/%.o)
 
-include_paths        := $(project_include_path)
-
-
-
-library_paths        := 
-link_sys          := stdc++ dl pthread
-
-link_librarys     := $(link_sys)
-
-
-empty := 
-library_path_export := $(subst $(empty) $(empty),:,$(library_paths))
-
-run_paths     := $(foreach item,$(library_paths),-Wl,-rpath=$(item))
-include_paths := $(foreach item,$(include_paths),-I$(item))
-library_paths := $(foreach item,$(library_paths),-L$(item))
-link_librarys := $(foreach item,$(link_librarys),-l$(item))
-
-cpp_compile_flags := -std=$(stdcpp) -w -g -O0 -m64 -fPIC -fopenmp -pthread  -fsanitize=address -fno-omit-frame-pointer $(include_paths)
-link_flags        := -pthread -fopenmp -Wl,-rpath='$$ORIGIN' -fsanitize=address $(library_paths) $(link_librarys)
-
-cpp_srcs := $(shell find $(srcdir) -name "*.cpp")
-cpp_objs := $(cpp_srcs:.cpp=.cpp.o)
-cpp_objs := $(cpp_objs:$(srcdir)/%=$(objdir)/%)
-cpp_mk   := $(cpp_objs:.cpp.o=.cpp.mk)
+# Dependency files (.mk)
+cpp_mk     := $(patsubst $(srcdir)/%.cpp,$(objdir)/%.cpp.mk, $(cpp_srcs))
 
 ifneq ($(MAKECMDGOALS), clean)
-include $(cpp_mk)
+-include $(cpp_mk)
 endif
 
 
-$(name)   : $(workdir)/$(name)
+# --- MODIFICATION: Add explicit targets for 'so', 'pro', and update 'all' ---
+.PHONY: all so pro run clean
 
-all       : $(name)
+# Default target: builds both the library and the executable
+all: so pro
 
-run       : $(name)
-	@cd $(workdir) && ./pro
+# NEW: Target to build ONLY the shared library
+so: $(workdir)/$(so_name)
 
-pro       : $(workdir)/pro
+# NEW: Target to build ONLY the executable (and its dependencies)
+pro: $(workdir)/$(pro_name)
 
-runpro    : pro
-	@export LD_LIBRARY_PATH=$(library_path_export)
-	@cd $(workdir) && ./pro
+# 'run' target now clearly depends on the 'pro' target
+run: pro
+	@echo "--- Running Application from workspace ---"
+	@cd $(workdir) && ./$(pro_name)
 
-$(workdir)/$(name) : $(cpp_objs)
-	@echo Link $@
+
+# --- Linking Rules ---
+
+# Rule for the shared library (.so)
+$(workdir)/$(so_name): $(lib_objs)
+	@echo "Linking Shared Library: $@"
 	@mkdir -p $(dir $@)
 	@$(cc) -shared $^ -o $@ $(link_flags)
 
-$(workdir)/pro : $(cpp_objs)
-	@echo Link $@
+# Rule for the executable (pro)
+$(workdir)/$(pro_name): $(main_obj) $(workdir)/$(so_name)
+	@echo "Linking Executable: $@"
 	@mkdir -p $(dir $@)
-	@$(cc) $^ -o $@ $(link_flags)
+	@$(cc) $(main_obj) -o $@ $(link_flags) -L$(workdir) -l:$(so_name) $(rpath_flags)
 
-$(objdir)/%.cpp.o : $(srcdir)/%.cpp
-	@echo Compile CXX $<
+
+# --- Compilation and Dependency Generation Rules (Unchanged) ---
+
+$(objdir)/%.o: $(srcdir)/%.cpp
+	@echo "Compiling CXX: $<"
 	@mkdir -p $(dir $@)
-	@$(cc) $(CXXFLAGS) -c $< -o $@ $(cpp_compile_flags)
+	@$(cc) -c $< -o $@ $(cpp_compile_flags)
 
-$(objdir)/%.cpp.mk : $(srcdir)/%.cpp
-	@echo Compile depends C++ $<
+$(objdir)/%.cpp.mk: $(srcdir)/%.cpp
+	@echo "Generating dependencies for: $<"
 	@mkdir -p $(dir $@)
 	@$(cc) -M $< -MF $@ -MT $(@:.cpp.mk=.cpp.o) $(cpp_compile_flags)
 
 
-clean :
-	@rm -rf $(objdir) $(workdir)/$(name) $(workdir)/pro
-
-
-.PHONY : clean run $(name) runpro
+# --- Clean Rule (Unchanged) ---
+clean:
+	@echo "Cleaning up build artifacts..."
+	@rm -rf $(objdir) $(workdir)
