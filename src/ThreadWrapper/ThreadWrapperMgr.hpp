@@ -3,9 +3,9 @@
 
 #include <memory>
 #include <thread>
-#include "ThreadSafeQueue.hpp"
-#include "ThreadWrapper.hpp"
-#include "ThreadWrapperMessage.hpp"
+#include "ThreadWrapper/ThreadSafeQueue.hpp"
+#include "ThreadWrapper/ThreadWrapper.hpp"
+#include "ThreadWrapper/ThreadWrapperMessage.hpp"
 
 enum ThreadWrapperStatus {
     THREAD_READY = 0,

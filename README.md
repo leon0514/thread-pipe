@@ -35,7 +35,8 @@ int main(int argc, char*agrv[])
     params1.thread_instance_name = "TestThread1";
 
     ThreadWrapperParam params2;
-    params2.thread_instance = new TestThread2();
+    std::shared_ptr<ThreadSafeQueue<std::shared_ptr<Message>>> result_queue = std::make_shared<ThreadSafeQueue<std::shared_ptr<Message>>>();
+    params2.thread_instance = new TestThread2(result_queue);
     params2.thread_instance_name = "TestThread2";
 
     std::vector<ThreadWrapperParam> params = {params0, params1, params2};
@@ -48,23 +49,37 @@ int main(int argc, char*agrv[])
     }
 
     app.wait_end();
-    getchar();
+    while (true)
+    {
+        auto msg =  result_queue->pop();
+        if (msg != nullptr)
+        {
+            printf("result value : %d\n", msg->value);
+        }
+    }
     return 0;
 }
 ```
 
 ```
-TestThread0 create message
+original_value : 850
+TestThread2 add message value + 2
 TestThread1 add message value + 1
-TestThread1 add message value + 2
+result value : 957
 TestThread0 create message
+original_value : 899
+TestThread2 add message value + 2
 TestThread1 add message value + 1
-TestThread1 add message value + 2
+result value : 966
 TestThread0 create message
+TestThread2 add message value + 2
 TestThread1 add message value + 1
-TestThread1 add message value + 2
+original_value : 197
+result value : 958
+TestThread2 add message value + 2
+result value : 80
+TestThread1 add message value + 1
 TestThread0 create message
-TestThread1 add message value + 1
-TestThread1 add message value + 2
+original_value : 546
 ```
-
+该示例展示了主线程从最后一个线程中获取最终数据，通过传入队列的指针实现

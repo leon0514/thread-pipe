@@ -1,7 +1,7 @@
 #ifndef THREADWRAPPERAPP_HPP
 #define THREADWRAPPERAPP_HPP
 
-#include "ThreadWrapperMgr.hpp"
+#include "ThreadWrapper/ThreadWrapperMgr.hpp"
 #include <vector>
 
 namespace {

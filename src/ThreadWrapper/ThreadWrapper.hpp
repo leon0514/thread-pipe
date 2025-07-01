@@ -4,7 +4,7 @@
 #include <string>
 #include <memory>
 
-#include "ThreadWrapperError.hpp"
+#include "ThreadWrapper/ThreadWrapperError.hpp"
 
 #define INVALID_INSTANCE_ID (-1)
 

@@ -18,7 +18,8 @@ int main(int argc, char*agrv[])
     params1.thread_instance_name = "TestThread1";
 
     ThreadWrapperParam params2;
-    params2.thread_instance = new TestThread2();
+    std::shared_ptr<ThreadSafeQueue<std::shared_ptr<Message>>> result_queue = std::make_shared<ThreadSafeQueue<std::shared_ptr<Message>>>();
+    params2.thread_instance = new TestThread2(result_queue);
     params2.thread_instance_name = "TestThread2";
 
     std::vector<ThreadWrapperParam> params = {params0, params1, params2};
@@ -31,6 +32,13 @@ int main(int argc, char*agrv[])
     }
 
     app.wait_end();
-    getchar();
+    while (true)
+    {
+        auto msg =  result_queue->pop();
+        if (msg != nullptr)
+        {
+            printf("result value : %d\n", msg->value);
+        }
+    }
     return 0;
 }

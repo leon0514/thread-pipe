@@ -1,4 +1,4 @@
-#include "ThreadWrapper.hpp"
+#include "ThreadWrapper/ThreadWrapper.hpp"
 
 
 ThreadWrapper::ThreadWrapper() : instance_id_(INVALID_INSTANCE_ID), instance_name_(""), base_configed_(false)

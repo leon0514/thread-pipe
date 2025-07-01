@@ -1,4 +1,4 @@
-#include "ThreadWrapperApp.hpp"
+#include "ThreadWrapper/ThreadWrapperApp.hpp"
 #include <unistd.h>
 
 namespace 

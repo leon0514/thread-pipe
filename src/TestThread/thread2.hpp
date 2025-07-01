@@ -8,8 +8,16 @@
 class TestThread2 : public ThreadWrapper
 {
 public:
+    TestThread2( std::shared_ptr<ThreadSafeQueue<std::shared_ptr<Message>>> result_queue_ptr) : result_queue_ptr_(result_queue_ptr)
+    {
+
+    }
     int initialize()
     {
+        if (result_queue_ptr_ == nullptr)
+        {
+            return 1;
+        }
         return 0;
     }
     int process(int msg_id, std::shared_ptr<void> data)
@@ -18,43 +26,29 @@ public:
         {
             case MSG_ADD:
             {
-                printf("TestThread1 add message value + 2\n");
+                printf("TestThread2 add message value + 2\n");
                 auto msg = std::static_pointer_cast<Message>(data);
                 msg->value += 2;
-                // MsgSend(msg);
+                MsgSend(msg);
                 break;
             }
             default:
-                printf("TestThread1 thread ignore msg %d\n", msg_id);
+                printf("TestThread2 thread ignore msg %d\n", msg_id);
                 break;
         }
         return 0;
     }
 
+private:
     ThreadWrapperError MsgSend(std::shared_ptr<Message> &message)
     {
-        std::string next_thread_name = message->call_thread_name_list_.back();
-        message->call_thread_name_list_.pop_back();
-        int next_thread_id = get_thread_wrapper_id_by_name(next_thread_name);
-        ThreadWrapperError ret;
-        while (1)
-        {
-            ret = send_message(next_thread_id, MSG_ADD, message);
-            if (ret == TW::ENQUEUE_FAILED) 
-            {
-                continue;
-            } 
-            else if (ret == TW::OK) 
-            {
-                break;
-            } 
-            else 
-            {
-                return ret;
-            }
-        }
-        return ret;
+        result_queue_ptr_->push(message);
+        return TW::OK;
     }
+
+private:
+    std::shared_ptr<ThreadSafeQueue<std::shared_ptr<Message>>> result_queue_ptr_;
+
 };
 
 #endif
