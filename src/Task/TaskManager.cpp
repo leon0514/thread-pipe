@@ -124,3 +124,67 @@ bool TaskManager::stop_task(const std::string& task_name) {
     std::cout << "Task '" << task_name << "' stopped successfully." << std::endl;
     return true;
 }
+
+
+std::vector<TaskDetails> TaskManager::get_all_task_details() const
+{
+    std::lock_guard<std::mutex> lock(mtx_);
+    std::vector<TaskDetails> result;
+    auto& app = ThreadWrapperApp::get_instance();
+
+    for (const auto& task_pair : running_tasks_) {
+        TaskDetails current_task_details;
+        current_task_details.name = task_pair.first;
+
+        for (const auto& thread_name : task_pair.second) {
+            // Get base details from the app layer
+            auto details_opt = app.get_thread_details_by_name(thread_name);
+            if (details_opt) {
+                ThreadDetails details = *details_opt;
+                
+                // Add reference count from the task manager layer
+                auto pool_it = thread_pool_.find(thread_name);
+                if (pool_it != thread_pool_.end()) {
+                    details.reference_count = pool_it->second.reference_count;
+                }
+                
+                current_task_details.threads.push_back(details);
+            }
+        }
+        result.push_back(current_task_details);
+    }
+    return result;
+}
+
+std::optional<TaskDetails> TaskManager::get_task_details_by_name(const std::string& task_name) const {
+    std::lock_guard<std::mutex> lock(mtx_);
+    auto& app = ThreadWrapperApp::get_instance();
+
+    auto task_it = running_tasks_.find(task_name);
+    if (task_it == running_tasks_.end()) {
+        // Task with the given name was not found
+        return std::nullopt;
+    }
+
+    TaskDetails task_details;
+    task_details.name = task_it->first;
+
+    const auto& thread_names_for_task = task_it->second;
+    for (const auto& thread_name : thread_names_for_task) {
+        // Get base details from the app layer
+        auto details_opt = app.get_thread_details_by_name(thread_name);
+        if (details_opt) {
+            ThreadDetails details = *details_opt;
+            
+            // Add reference count from our pool
+            auto pool_it = thread_pool_.find(thread_name);
+            if (pool_it != thread_pool_.end()) {
+                details.reference_count = pool_it->second.reference_count;
+            }
+            
+            task_details.threads.push_back(details);
+        }
+    }
+    
+    return task_details;
+}

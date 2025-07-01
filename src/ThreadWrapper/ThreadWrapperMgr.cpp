@@ -89,3 +89,7 @@ ThreadWrapperError ThreadWrapperMgr::push_message_to_queue(std::shared_ptr<Threa
     }
     return ThreadWrapperError::OK;
 }
+
+uint32_t ThreadWrapperMgr::get_queue_size() const {
+    return msg_queue_.size();
+}

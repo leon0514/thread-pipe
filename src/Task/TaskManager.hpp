@@ -42,6 +42,11 @@ public:
      */
     bool stop_task(const std::string& task_name);
 
+    std::vector<TaskDetails> get_all_task_details() const;
+
+    std::optional<TaskDetails> get_task_details_by_name(const std::string& task_name) const;
+
+
 private:
     TaskManager();
     ~TaskManager();

@@ -38,6 +38,8 @@ public:
     ThreadWrapperError push_message_to_queue(std::shared_ptr<ThreadWrapperMessage> message);
     ThreadWrapperError wait_for_init();
 
+    uint32_t get_queue_size() const;
+
 private:
     void thread_entry();
 

@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <memory>
+#include "ThreadWrapper/ThreadDetails.hpp"
 #include "ThreadWrapper/ThreadWrapperMgr.hpp"
 
 class ThreadWrapperApp
@@ -25,6 +26,8 @@ public:
     void stop();
     void stop_threads(const std::vector<int>& thread_ids);
 
+    std::optional<ThreadDetails> get_thread_details_by_name(const std::string& name) const;
+
 private:
     ThreadWrapperApp();
     
@@ -33,6 +36,8 @@ private:
     void release_threads();
 
     std::vector<std::unique_ptr<ThreadWrapperMgr>> thread_mgr_list_;
+
+    mutable std::mutex app_mutex_;
 
     static constexpr int MAIN_THREAD_ID = 0;
 };

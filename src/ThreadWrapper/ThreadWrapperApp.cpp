@@ -200,3 +200,17 @@ ThreadWrapperError ThreadWrapperApp::send_message(int dest_id, int msg_id, std::
 
     return thread_mgr_list_[dest_id]->push_message_to_queue(p_message);
 }
+
+std::optional<ThreadDetails> ThreadWrapperApp::get_thread_details_by_name(const std::string& name) const {
+    std::lock_guard<std::mutex> lock(app_mutex_);
+    for (const auto& mgr : thread_mgr_list_) {
+        if (mgr && mgr->get_thread_name() == name) {
+            ThreadDetails details;
+            details.name = mgr->get_thread_name();
+            details.status = mgr->get_status();
+            details.queue_size = mgr->get_queue_size();
+            return details;
+        }
+    }
+    return std::nullopt; // Thread not found
+}
