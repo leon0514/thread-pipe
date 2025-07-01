@@ -4,103 +4,54 @@
 #include <thread>
 #include <memory>
 
+#include "ThreadWrapper/TaskManager.hpp"
+
 #include "ThreadWrapper/ThreadWrapperApp.hpp"
 #include "TestThread/ProducerThread.hpp"
 #include "TestThread/ProcessorThread.hpp"
 #include "TestThread/ConsumerThread.hpp"
 #include "TestThread/param.hpp" 
 
-int main(int argc, char* argv[])
-{
-    std::cout << "========================================" << std::endl;
-    std::cout << "             线程管道应用启动...         " << std::endl;
-    std::cout << "========================================" << std::endl;
+int main() {
+    auto& task_manager = get_task_manager_instance();
 
-    auto& app = get_thread_wrapper_app_instance();
-
-    auto result_queue = std::make_shared<ThreadSafeQueue<std::shared_ptr<PipelineMessage>>>(2048);
+    // --- Define Task 1: "DataPipeline" ---
+    std::cout << "--- Creating Task 1: DataPipeline ---" << std::endl;
+    std::vector<ThreadWrapperParam> pipeline_params;
+    auto result_queue1 = std::make_shared<ThreadSafeQueue<std::shared_ptr<PipelineMessage>>>(100);
+    std::vector<std::string> pipeline_route = {"Consumer-1", "Processor-1"};
+    pipeline_params.push_back({std::make_unique<ProducerThread>(pipeline_route), "Producer-1"});
+    pipeline_params.push_back({std::make_unique<ProcessorThread>(), "Processor-1"});
+    pipeline_params.push_back({std::make_unique<ConsumerThread>(result_queue1), "Consumer-1"});
     
-    std::vector<std::string> pipeline_route = {"Consumer", "Processor"};
+    task_manager.create_task("DataPipeline", pipeline_params);
     
-    std::string flow_str = "Producer";
-    for (auto it = pipeline_route.rbegin(); it != pipeline_route.rend(); ++it) {
-        flow_str += " -> " + *it;
-    }
-    std::cout << "\n[配置] 消息管道流程: " << flow_str << std::endl;
+    // Trigger the pipeline
+    send_message(get_thread_wrapper_id_by_name("Producer-1"), static_cast<int>(MessageId::APP_START), nullptr);
 
-    std::vector<ThreadWrapperParam> params;
+    // --- Define Task 2: "MonitoringTask" (a simple single-thread task) ---
+    std::cout << "\n--- Creating Task 2: MonitoringTask ---" << std::endl;
+    std::vector<ThreadWrapperParam> monitor_params;
+    monitor_params.push_back({std::make_unique<ProcessorThread>(), "Monitor"}); // Reusing ProcessorThread for demo
+    
+    task_manager.create_task("MonitoringTask", monitor_params);
 
-    params.push_back({
-        std::make_unique<ProducerThread>(pipeline_route),
-        "Producer",
-        0,
-        INVALID_INSTANCE_ID,
-        128
-    });
 
-    params.push_back({
-        std::make_unique<ProcessorThread>(),
-        "Processor",
-        0,
-        INVALID_INSTANCE_ID,
-        128
-    });
+    // --- Let tasks run for a while ---
+    std::cout << "\n--- All tasks running for 5 seconds ---" << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(5));
 
-    params.push_back({
-        std::make_unique<ConsumerThread>(result_queue),
-        "Consumer",
-        0,
-        INVALID_INSTANCE_ID,
-        128
-    });
+    // --- Stop one task specifically ---
+    std::cout << "\n--- Stopping Task 1: DataPipeline ---" << std::endl;
+    task_manager.stop_task("DataPipeline");
 
-    std::cout << "\n[启动] 正在启动所有线程..." << std::endl;
-    if (app.start(params) != ThreadWrapperError::OK) {
-        std::cerr << "错误: 启动线程框架失败！程序将退出。" << std::endl;
-        return -1;
-    }
-    std::cout << "[成功] 所有线程已成功启动并初始化。" << std::endl;
+    std::cout << "\n--- DataPipeline stopped, MonitoringTask is still running for 3 more seconds ---" << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    
+    // The TaskManager destructor will automatically stop any remaining tasks ("MonitoringTask")
+    // when main exits. Or you can stop it manually:
+    // task_manager.stop_task("MonitoringTask");
 
-    int producer_id = app.get_thread_wrapper_id_by_name("Producer");
-    if (producer_id != INVALID_INSTANCE_ID) {
-        std::cout << "\n[运行] 向 Producer (ID: " << producer_id << ") 发送启动信号，开始生成消息..." << std::endl;
-        send_message(producer_id, static_cast<int>(MessageId::APP_START), nullptr);
-    } else {
-        std::cerr << "错误: 找不到名为 'Producer' 的线程！" << std::endl;
-        app.stop();
-        return -1;
-    }
-
-    const int run_duration_seconds = 3;
-    std::cout << "[运行] 应用将运行 " << run_duration_seconds << " 秒以处理数据..." << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(run_duration_seconds));
-
-    std::cout << "\n[关闭] 正在准备关闭所有线程..." << std::endl;
-    app.stop();
-    std::cout << "[成功] 所有工作线程已安全停止。" << std::endl;
-
-    std::cout << "\n[验证] 开始处理并统计结果队列中的数据..." << std::endl;
-    std::shared_ptr<PipelineMessage> msg;
-    int message_count = 0;
-    while (result_queue->try_pop(msg)) {
-        if (msg) {
-            // 在我们的管道中，每个消息的值都会被 Processor (+1) 和 Consumer (+2) 修改
-            // 所以最终值应该是 原始值 + 3
-            // std::cout << "  收到结果: " << msg->value << std::endl;
-            message_count++;
-        }
-    }
-
-    std::cout << "\n========================================" << std::endl;
-    std::cout << "             应用运行报告             " << std::endl;
-    std::cout << "----------------------------------------" << std::endl;
-    std::cout << "  运行时间: " << run_duration_seconds << " 秒" << std::endl;
-    std::cout << "  处理的消息总数: " << message_count << " 条" << std::endl;
-    if (run_duration_seconds > 0 && message_count > 0) {
-        std::cout << "  平均处理速率: " << message_count / run_duration_seconds << " 条/秒" << std::endl;
-    }
-    std::cout << "========================================" << std::endl;
-    std::cout << "\n应用已安全退出。" << std::endl;
-
-    return 0;
+    std::cout << "\n--- Application exiting ---" << std::endl;
+    return 0; // TaskManager destructor is called here
 }

@@ -38,6 +38,9 @@ ThreadWrapperApp::~ThreadWrapperApp()
 
 ThreadWrapperError ThreadWrapperApp::start(std::vector<ThreadWrapperParam>& thread_param_list)
 {
+    // *** FIX: Record the starting index of the new threads we are about to create. ***
+    const size_t start_index = thread_mgr_list_.size();
+
     for (auto& params : thread_param_list) 
     {
         int instance_id = create_thread_wrapper_mgr(
@@ -48,6 +51,7 @@ ThreadWrapperError ThreadWrapperApp::start(std::vector<ThreadWrapperParam>& thre
 
         if (instance_id == INVALID_INSTANCE_ID) 
         {
+            // If creation fails, we should ideally roll back, but for now, we stop everything.
             printf("错误: 创建线程管理器 '%s' 失败。请检查线程名是否重复。\n", params.thread_instance_name.c_str());
             release_threads();
             return ThreadWrapperError::ERROR;
@@ -55,17 +59,19 @@ ThreadWrapperError ThreadWrapperApp::start(std::vector<ThreadWrapperParam>& thre
         params.thread_instance_id = instance_id;
     }
 
-    for (size_t i = MAIN_THREAD_ID + 1; i < thread_mgr_list_.size(); ++i) 
+    // *** FIX: Iterate only over the NEW threads that were added in THIS call. ***
+    for (size_t i = start_index; i < thread_mgr_list_.size(); ++i) 
     {
         thread_mgr_list_[i]->start_thread();
     }
 
-    for (size_t i = MAIN_THREAD_ID + 1; i < thread_mgr_list_.size(); ++i) 
+    // *** FIX: Wait only for the NEW threads to initialize. ***
+    for (size_t i = start_index; i < thread_mgr_list_.size(); ++i) 
     {
         if (thread_mgr_list_[i]->wait_for_init() != ThreadWrapperError::OK) 
         {
             printf("错误: 线程 '%s' 初始化失败。\n", thread_mgr_list_[i]->get_thread_name().c_str());
-            release_threads();
+            release_threads(); // Stop all threads on failure
             return ThreadWrapperError::START_THREAD_FAILED;
         }
     }
@@ -76,6 +82,33 @@ ThreadWrapperError ThreadWrapperApp::start(std::vector<ThreadWrapperParam>& thre
 void ThreadWrapperApp::stop()
 {
     release_threads();
+}
+
+void ThreadWrapperApp::stop_threads(const std::vector<int>& thread_ids)
+{
+    // Step 1: Send stop signal (poison pill) to specified threads
+    for (int id : thread_ids) {
+        if (id > 0 && static_cast<size_t>(id) < thread_mgr_list_.size()) {
+            auto& mgr = thread_mgr_list_[id];
+            if (mgr && mgr->get_status() == ThreadWrapperStatus::RUNNING) {
+                mgr->set_status(ThreadWrapperStatus::EXITING);
+                mgr->push_message_to_queue(nullptr); // Send poison pill
+            }
+        }
+    }
+
+    // Step 2: Wait for specified threads to join
+    for (int id : thread_ids) {
+        if (id > 0 && static_cast<size_t>(id) < thread_mgr_list_.size()) {
+            if (thread_mgr_list_[id]) {
+                thread_mgr_list_[id]->join_thread();
+            }
+        }
+    }
+
+    // Note: This implementation does not remove the thread managers from thread_mgr_list_
+    // to keep thread IDs stable. A more complex implementation might mark them as 'reusable'.
+    // For now, we assume tasks are created and destroyed, but not recreated with the same IDs.
 }
 
 void ThreadWrapperApp::release_threads()

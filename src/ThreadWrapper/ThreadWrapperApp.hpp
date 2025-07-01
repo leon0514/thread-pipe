@@ -23,6 +23,7 @@ public:
     ThreadWrapperError send_message(int dest_id, int msg_id, std::shared_ptr<void> data);
 
     void stop();
+    void stop_threads(const std::vector<int>& thread_ids);
 
 private:
     ThreadWrapperApp();
