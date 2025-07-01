@@ -1,5 +1,5 @@
-#ifndef THREADWRAPPERTYPE_HPP
-#define THREADWRAPPERTYPE_HPP
+#ifndef THREADWRAPPERMESSAGE_HPP
+#define THREADWRAPPERMESSAGE_HPP
 
 struct ThreadWrapperMessage {
     int dest;

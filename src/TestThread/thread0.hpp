@@ -46,11 +46,11 @@ public:
         while (1)
         {
             ret = send_message(next_thread_id, MSG_ADD, message);
-            if (ret == tw::ENQUEUE_FAILED) 
+            if (ret == TW::ENQUEUE_FAILED) 
             {
                 continue;
             } 
-            else if (ret == tw::OK) 
+            else if (ret == TW::OK) 
             {
                 break;
             } 
@@ -60,7 +60,7 @@ public:
             }
         }
         ret = send_message(self_thread_id_, MSG_CREATE, nullptr);
-        if (ret != tw::OK)
+        if (ret != TW::OK)
         {
             printf("Process app start message failed, error %d", ret);
         }
@@ -70,7 +70,7 @@ public:
     ThreadWrapperError app_start()
     {
         ThreadWrapperError ret = send_message(self_thread_id_, MSG_CREATE, nullptr);
-        if (ret != tw::OK)
+        if (ret != TW::OK)
         {
             printf("Process app start message failed, error %d", ret);
         }

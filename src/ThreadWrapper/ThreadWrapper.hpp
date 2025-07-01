@@ -17,7 +17,7 @@ public:
     virtual ~ThreadWrapper();
     virtual int initialize()
     {
-        return 1;
+        return 0;
     }
 
     virtual int process(int msgId, std::shared_ptr<void> msg_data) = 0;

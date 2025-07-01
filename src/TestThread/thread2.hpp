@@ -40,11 +40,11 @@ public:
         while (1)
         {
             ret = send_message(next_thread_id, MSG_ADD, message);
-            if (ret == tw::ENQUEUE_FAILED) 
+            if (ret == TW::ENQUEUE_FAILED) 
             {
                 continue;
             } 
-            else if (ret == tw::OK) 
+            else if (ret == TW::OK) 
             {
                 break;
             } 

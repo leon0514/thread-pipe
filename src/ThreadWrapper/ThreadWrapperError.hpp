@@ -15,7 +15,7 @@ enum class ThreadWrapperError {
     ERROR_DEST_INVALID = 7,
 };
 
-using tw = ThreadWrapperError;
+using TW = ThreadWrapperError;
 
 
 #endif // THREAD_WRAPPER_ERROR_HPP

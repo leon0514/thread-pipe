@@ -91,7 +91,7 @@ ThreadWrapperError ThreadWrapperMgr::wait_thread_init_end()
         {
             std::string instance_name = thread_instance_->self_instance_name();
             printf("%s thread not running\n", instance_name.c_str());
-            return tw::START_THREAD_FAILED;
+            return TW::START_THREAD_FAILED;
         } 
         else 
         {
@@ -99,13 +99,13 @@ ThreadWrapperError ThreadWrapperMgr::wait_thread_init_end()
         }
     }
 
-    return tw::OK;
+    return TW::OK;
 }
 
 ThreadWrapperError ThreadWrapperMgr::push_message_to_queue(std::shared_ptr<ThreadWrapperMessage>& messgae)
 {
     if (status_ != ThreadWrapperStatus::THREAD_RUNNING) {
-        return tw::THREAD_ABNORMAL;
+        return TW::THREAD_ABNORMAL;
     }
-    return msg_queue_.push(messgae) ? tw::OK : tw::ENQUEUE_FAILED;
+    return msg_queue_.push(messgae) ? TW::OK : TW::ENQUEUE_FAILED;
 }

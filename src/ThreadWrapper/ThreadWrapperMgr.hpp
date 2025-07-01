@@ -5,7 +5,7 @@
 #include <thread>
 #include "ThreadSafeQueue.hpp"
 #include "ThreadWrapper.hpp"
-#include "ThreadWrapperType.hpp"
+#include "ThreadWrapperMessage.hpp"
 
 enum ThreadWrapperStatus {
     THREAD_READY = 0,

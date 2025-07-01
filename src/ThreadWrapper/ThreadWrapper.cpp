@@ -10,13 +10,13 @@ ThreadWrapperError ThreadWrapper::base_config(int instance_id, const std::string
 {
     if (base_configed_)
     {
-        return tw::ALREADY_INITED;
+        return TW::ALREADY_INITED;
     }
     instance_id_ = instance_id;
     instance_name_.assign(thread_name.c_str());
     base_configed_ = true;
 
-    return tw::OK;
+    return TW::OK;
 }
 
 

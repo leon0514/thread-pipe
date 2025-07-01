@@ -25,7 +25,7 @@ ThreadWrapperError ThreadWrapperApp::initialize()
     ThreadWrapperMgr* th_mgr = new ThreadWrapperMgr(nullptr, "main", msg_queue_size);
     thread_wrapper_mgr_list_.push_back(th_mgr);
     th_mgr->set_status(THREAD_RUNNING);
-    return tw::OK;
+    return TW::OK;
 }
 
 ThreadWrapperError ThreadWrapperApp::start(std::vector<ThreadWrapperParam>& thread_param_list)
@@ -39,7 +39,7 @@ ThreadWrapperError ThreadWrapperApp::start(std::vector<ThreadWrapperParam>& thre
         if (instance_id == INVALID_INSTANCE_ID) 
         {
             printf("Create thread_wrapper_mgr failed");
-            return tw::ERROR;
+            return TW::ERROR;
         }
         thread_param_list[i].thread_instance_id = instance_id;
     }
@@ -54,13 +54,13 @@ ThreadWrapperError ThreadWrapperApp::start(std::vector<ThreadWrapperParam>& thre
     {
         int instance_id = thread_param_list[i].thread_instance_id;
         ThreadWrapperError ret = thread_wrapper_mgr_list_[instance_id]->wait_thread_init_end();
-        if (ret != tw::OK) 
+        if (ret != TW::OK) 
         {
             return ret;
         }
     }
 
-    return tw::OK;
+    return TW::OK;
 }
 
 int ThreadWrapperApp::create_thread_wrapper(ThreadWrapper* thread_instance, const std::string instance_name, int device_id, const uint32_t msg_queue_size)
@@ -73,7 +73,7 @@ int ThreadWrapperApp::create_thread_wrapper(ThreadWrapper* thread_instance, cons
 
     thread_wrapper_mgr_list_[instance_id]->create_thread();
     ThreadWrapperError ret = thread_wrapper_mgr_list_[instance_id]->wait_thread_init_end();
-    if (ret != tw::OK) 
+    if (ret != TW::OK) 
     {
         return INVALID_INSTANCE_ID;
     }
@@ -91,7 +91,7 @@ int ThreadWrapperApp::create_thread_wrapper_mgr(
 
     int instance_id = thread_wrapper_mgr_list_.size();
     ThreadWrapperError ret = thread_instance->base_config(instance_id, instance_name, device_id);
-    if (ret != tw::OK) 
+    if (ret != TW::OK) 
     {
         return INVALID_INSTANCE_ID;
     }
@@ -185,7 +185,7 @@ ThreadWrapperError ThreadWrapperApp::send_message(int dest, int msg_id, std::sha
 {
     if ((uint32_t)dest > thread_wrapper_mgr_list_.size()) 
     {
-        return tw::ERROR_DEST_INVALID;
+        return TW::ERROR_DEST_INVALID;
     }
 
     std::shared_ptr<ThreadWrapperMessage> p_message = std::make_shared<ThreadWrapperMessage>();
