@@ -28,25 +28,13 @@
 
 这种分层使得开发者可以根据需求选择合适的抽象级别进行交互。
 
-## 设计与优化亮点
+## 设计亮点
 
-本框架采用了多项现代C++的最佳实践来保证其健壮性和高性能。
+*   **优雅停机 (Graceful Shutdown)**: 使用“毒丸”模式 (`nullptr` 消息)唤醒阻塞的线程并使其安全退出，从根本上避免了停机死锁。
+*   **精确的初始化同步**: 使用 `std::promise` 和 `std::future`，确保主线程可以在工作线程初始化完成后才继续执行，实现了精确、低开销的同步。
+*   **无锁的状态管理**: 使用 `std::atomic` 包装线程状态，避免了使用重量级互斥锁的开销。
+*   **引用计数的线程池**: `TaskManager` 内部实现了对线程的引用计数，这是实现安全线程复用的基石。
 
-1.  **优雅停机 (Graceful Shutdown) 与 “毒丸”模式**
-    *   **问题**: 在多线程编程中，一个常见的难题是如何安全地停止线程，特别是当线程可能因等待任务而阻塞时。
-    *   **解决方案**: 本框架采用“**毒丸 (Poison Pill)**”模式。当请求停机时，框架会向每个线程的消息队列中推送一个特殊的空消息 (`nullptr`)。工作线程从阻塞的 `wait_and_pop` 中被唤醒后，一旦检测到这个“毒丸”，就会立即安全退出循环，从而避免了死锁。
-
-2.  **精确的初始化同步与 `std::promise`**
-    *   **问题**: 主线程需要确保工作线程的初始化逻辑执行完毕后，才能向其发送消息。
-    *   **解决方案**: 使用 `std::promise` 和 `std::future`。工作线程初始化完成后，会通过 `std::promise` 发出信号。主线程则通过 `std::future` 等待这个信号，实现了精确、低开销的同步。
-
-3.  **无锁的状态管理与 `std::atomic`**
-    *   **问题**: 线程状态（如 `RUNNING`, `EXITING`）需要在多个线程间共享，直接访问会产生数据竞争。
-    *   **解决方案**: 使用 `std::atomic` 来包装线程状态。这使得状态的读写操作变为原子操作，避免了使用重量级互斥锁的开销。
-
-4.  **RAII 与智能指针**
-    *   **问题**: 手动管理动态分配的资源（如线程对象、业务逻辑对象）容易出错，导致内存泄漏。
-    *   **解决方案**: 框架全面使用 `std::unique_ptr` 来管理所有权。当 `ThreadWrapperApp` 销毁时，它所管理的所有 `ThreadWrapperMgr` 对象及其包含的资源都会被自动、安全地释放，代码简洁且无泄漏风险。
 
 
 ## 用法示例
@@ -193,21 +181,14 @@ int main() {
 这个例子展示了如何利用本框架构建灵活、解耦、可扩展的多线程处理流程。消息本身驱动着整个业务逻辑的流转，而框架则在底层保证了线程的安全和稳定运行。
 
 
-### 高级用法2：多任务管理 (Multi-Task Management)
+### 终极用法：带线程复用的多任务管理
 
-在大型应用中，我们常常需要同时运行多个独立的业务流程，例如，一个数据处理管道和一个后台监控任务。`TaskManager` 扩展层就是为此设计的。它允许我们将一组线程打包成一个“任务”，并按名称进行管理。
+这是本框架最强大的功能。`TaskManager` 允许我们定义多个独立的业务任务，并在这些任务之间安全地共享通用线程（如日志、统计、数据库连接等）。
 
-**场景**: 我们将同时创建并运行两个完全独立的任务。
-*   **任务A: "DataPipeline"**: 由 `Producer`, `Processor`, `Consumer` 三个线程组成的数据处理流水线。
-*   **任务B: "HeartbeatMonitor"**: 由一个线程组成的、模拟后台心跳监控的简单任务。
+**场景**: 我们将同时运行两个任务，它们共享一个名为 `"Logger"` 的线程。
+*   **任务A**: 需要一个专属的 `"Producer-A"` 线程和一个共享的 `"Logger"` 线程。
+*   **任务B**: 需要一个专属的 `"Consumer-B"` 线程和一个共享的 `"Logger"` 线程。
 
-#### 第1步: 添加 `TaskManager` 层
-
-首先，在您的项目中引入 `TaskManager.hpp` 和 `TaskManager.cpp` 文件。这个管理器内部会使用 `ThreadWrapperApp` 来完成底层的线程操作。
-
-#### 第2步: 使用 `TaskManager` 编排任务
-
-在 `main` 函数中，我们不再直接与 `ThreadWrapperApp` 交互，而是通过 `TaskManager` 来定义、启动和停止任务。
 
 ```cpp
 #include "Task/TaskManager.hpp"
@@ -221,66 +202,51 @@ int main() {
 int main() {
     auto& task_manager = get_task_manager_instance();
 
-    // ==========================================================
-    //  任务 A: 定义并创建 "DataPipeline"
-    // ==========================================================
-    std::cout << "--- 正在定义任务 A: DataPipeline ---" << std::endl;
-    std::vector<ThreadWrapperParam> pipeline_params;
-    auto result_queue = std::make_shared<ThreadSafeQueue<std::shared_ptr<PipelineMessage>>>(1024);
-    std::vector<std::string> pipeline_route = {"Consumer-A", "Processor-A"};
-    
-    pipeline_params.push_back({std::make_unique<ProducerThread>(pipeline_route), "Producer-A"});
-    pipeline_params.push_back({std::make_unique<ProcessorThread>(), "Processor-A"});
-    pipeline_params.push_back({std::make_unique<ConsumerThread>(result_queue), "Consumer-A"});
-    
-    if (!task_manager.create_task("DataPipeline", pipeline_params)) {
-        std::cerr << "创建任务 'DataPipeline' 失败!" << std::endl;
-        return -1;
-    }
-    // 触发管道开始工作
-    send_message(get_thread_wrapper_id_by_name("Producer-A"), static_cast<int>(MessageId::APP_START), nullptr);
+    // 1. 定义任务 A，它需要 "Producer-A" 和 "Logger"
+    std::cout << "--- 1. 创建任务 A (需要 Producer-A, Logger) ---" << std::endl;
+    std::vector<ThreadWrapperParam> task_a_params;
+    task_a_params.push_back({std::make_unique<ProducerThread>(...), "Producer-A"});
+    task_a_params.push_back({std::make_unique<ProcessorThread>(), "Logger"});
+    task_manager.create_task("TaskA", task_a_params);
+    // 预期输出:
+    //  - Created new thread 'Producer-A' ... ref count: 1
+    //  - Created new thread 'Logger' ... ref count: 1
 
+    // 2. 定义任务 B，它需要 "Consumer-B" 和 "Logger"
+    std::cout << "\n--- 2. 创建任务 B (需要 Consumer-B, Logger) ---" << std::endl;
+    std::vector<ThreadWrapperParam> task_b_params;
+    task_b_params.push_back({std::make_unique<ConsumerThread>(...), "Consumer-B"});
+    task_b_params.push_back({std::make_unique<ProcessorThread>(), "Logger"}); // 复用 Logger
+    task_manager.create_task("TaskB", task_b_params);
+    // 预期输出:
+    //  - Created new thread 'Consumer-B' ... ref count: 1
+    //  - Reusing thread 'Logger', new reference count: 2  <-- 核心！线程被复用
 
-    // ==========================================================
-    //  任务 B: 定义并创建 "HeartbeatMonitor"
-    // ==========================================================
-    std::cout << "\n--- 正在定义任务 B: HeartbeatMonitor ---" << std::endl;
-    std::vector<ThreadWrapperParam> monitor_params;
-    // 为简单起见，我们复用 ProcessorThread 来模拟一个简单的工作线程
-    monitor_params.push_back({std::make_unique<ProcessorThread>(), "Monitor-B"}); 
-    
-    if (!task_manager.create_task("HeartbeatMonitor", monitor_params)) {
-        std::cerr << "创建任务 'HeartbeatMonitor' 失败!" << std::endl;
-        return -1;
-    }
-
-    // ==========================================================
-    //  让所有任务并行运行
-    // ==========================================================
-    std::cout << "\n--- 所有任务已启动，并行运行 5 秒 ---" << std::endl;
+    std::cout << "\n--- 3. 两个任务并行运行... ---" << std::endl;
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
-    // ==========================================================
-    //  按名称独立停止任务
-    // ==========================================================
-    std::cout << "\n--- 停止任务 A: DataPipeline ---" << std::endl;
-    task_manager.stop_task("DataPipeline");
+    // 4. 停止任务 A
+    std::cout << "\n--- 4. 停止任务 A ---" << std::endl;
+    task_manager.stop_task("TaskA");
+    // 预期输出:
+    //  - 'Producer-A' 引用计数减为 0，将被停止。
+    //  - 'Logger' 引用计数减为 1，将继续运行。 <-- 核心！共享线程不受影响
 
-    std::cout << "\n--- 'DataPipeline' 已停止，'HeartbeatMonitor' 仍在运行... (等待 3 秒) ---" << std::endl;
+    std::cout << "\n--- 5. 任务 B 和共享的 Logger 仍在运行... ---" << std::endl;
     std::this_thread::sleep_for(std::chrono::seconds(3));
     
-    // ==========================================================
-    //  应用退出
-    // ==========================================================
-    // 当 main 函数结束时，TaskManager 的析构函数会被调用，
-    // 它会自动清理并停止所有剩余的、仍在运行的任务（例如 "HeartbeatMonitor"）。
-    // 这保证了资源的完全释放和程序的优雅退出。
-    std::cout << "\n--- 应用即将退出，TaskManager 将自动清理剩余任务 ---" << std::endl;
-    return 0;
+    // 6. 停止任务 B
+    std::cout << "\n--- 6. 停止任务 B ---" << std::endl;
+    task_manager.stop_task("TaskB");
+    // 预期输出:
+    //  - 'Consumer-B' 引用计数减为 0，将被停止。
+    //  - 'Logger' 引用计数减为 0，现在也将被停止。 <-- 核心！共享线程最后被安全销毁
+
+    std::cout << "\n--- 7. 应用退出 ---" << std::endl;
+    return 0; // TaskManager 析构函数会确保所有资源都被释放
 }
 ```
-
-这个例子清晰地展示了如何使用 `TaskManager` 这一更高层次的抽象来管理复杂的多任务场景，而无需关心底层线程的ID和生命周期细节。
+这个例子清晰地展示了 `TaskManager` 如何智能地管理线程的生命周期，实现了高效、安全的资源复用
 
 ## 构建与运行
 
