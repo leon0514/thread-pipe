@@ -42,11 +42,11 @@ public:
                 app_start();
                 break;
             case MSG_CREATE:
-                printf("TestThread0 create message\n");
+                // printf("TestThread0 create message\n");
                 MsgSend(message);
                 break;
             default:
-                printf("TestThread0 thread ignore msg %d\n", msg_id);
+                // printf("TestThread0 thread ignore msg %d\n", msg_id);
                 break;
         }
         return 0;
@@ -56,7 +56,7 @@ public:
     {
         message->call_thread_name_list_ = call_thread_name_list_;
         message->value = generate_value(1, 1000);
-        printf("original_value : %d\n", message->value);
+        // printf("original_value : %d\n", message->value);
         std::string next_thread_name = message->call_thread_name_list_.back();
         message->call_thread_name_list_.pop_back();
         int next_thread_id = get_thread_wrapper_id_by_name(next_thread_name);

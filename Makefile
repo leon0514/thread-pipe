@@ -3,7 +3,7 @@ name      := trt_pipeline.so
 workdir   := workspace
 srcdir    := src
 objdir    := objs
-stdcpp    := c++11
+stdcpp    := c++17
 
 
 project_include_path := $(srcdir)

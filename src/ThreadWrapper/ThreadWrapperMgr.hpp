@@ -1,68 +1,55 @@
-#ifndef THREADWRAPPERMGR_HPP__
-#define THREADWRAPPERMGR_HPP__
+#ifndef THREADWRAPPERMGR_HPP
+#define THREADWRAPPERMGR_HPP
 
 #include <memory>
 #include <thread>
+#include <string>
+#include <future> // OPTIMIZED: For signaling init completion.
+#include <atomic> // OPTIMIZED: For thread-safe status updates.
+
 #include "ThreadWrapper/ThreadSafeQueue.hpp"
 #include "ThreadWrapper/ThreadWrapper.hpp"
 #include "ThreadWrapper/ThreadWrapperMessage.hpp"
 
-enum ThreadWrapperStatus {
-    THREAD_READY = 0,
-    THREAD_RUNNING = 1,
-    THREAD_EXITING = 2,
-    THREAD_EXITED = 3,
-    THREAD_ERROR = 4,
+// OPTIMIZED: Scoped enum for status, now atomic.
+enum class ThreadWrapperStatus {
+    READY,
+    RUNNING,
+    EXITING,
+    EXITED,
+    ERROR
 };
-
 
 class ThreadWrapperMgr
 {
 public:
-    ThreadWrapperMgr(ThreadWrapper* thread_instance, const std::string& thread_name, const uint32_t mag_queue_size);
+    ThreadWrapperMgr(std::unique_ptr<ThreadWrapper> thread_instance, const std::string& thread_name, uint32_t msg_queue_size);
     ~ThreadWrapperMgr();
 
-    static void thread_entry(void* data);
+    ThreadWrapperMgr(const ThreadWrapperMgr&) = delete;
+    ThreadWrapperMgr& operator=(const ThreadWrapperMgr&) = delete;
 
-    ThreadWrapper* get_instance()
-    {
-        return this->thread_instance_;
-    }
+    void start_thread();
+    void join_thread();
 
-    const std::string& get_thread_name()
-    {
-        return name_;
-    }
-
-    ThreadWrapperError push_message_to_queue(std::shared_ptr<ThreadWrapperMessage>& messgae);
-
-    std::shared_ptr<ThreadWrapperMessage> pop_message_from_queue()
-    {
-        return this->msg_queue_.pop();
-    }
-
-    void create_thread();
-
-    void set_status(ThreadWrapperStatus status)
-    {
-        status_ = status;
-    }
-
-    ThreadWrapperStatus get_status()
-    {
-        return status_;
-    }
-
-    ThreadWrapperError wait_thread_init_end();
-
+    const std::string& get_thread_name() const noexcept { return name_; }
+    ThreadWrapperStatus get_status() const noexcept { return status_; }
+    void set_status(ThreadWrapperStatus status) noexcept { status_ = status; }
+    
+    ThreadWrapperError push_message_to_queue(std::shared_ptr<ThreadWrapperMessage> message);
+    ThreadWrapperError wait_for_init();
 
 private:
-    bool running_;
-    ThreadWrapperStatus status_;
-    ThreadWrapper* thread_instance_;
+    void thread_entry();
+
+    std::unique_ptr<ThreadWrapper> thread_instance_;
     std::string name_;
     ThreadSafeQueue<std::shared_ptr<ThreadWrapperMessage>> msg_queue_;
 
+    std::thread thread_;
+    std::promise<bool> init_promise_;
+
+    std::atomic<ThreadWrapperStatus> status_;
 };
 
 #endif // THREADWRAPPERMGR_HPP

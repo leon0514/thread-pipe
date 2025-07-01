@@ -1,26 +1,16 @@
 #include "ThreadWrapper/ThreadWrapper.hpp"
 
-
-ThreadWrapper::ThreadWrapper() : instance_id_(INVALID_INSTANCE_ID), instance_name_(""), base_configed_(false)
+// OPTIMIZED: Renamed from base_config to configure.
+ThreadWrapperError ThreadWrapper::configure(int instance_id, const std::string& thread_name, int device_id)
 {
-
-}
-
-ThreadWrapperError ThreadWrapper::base_config(int instance_id, const std::string& thread_name, int device_id)
-{
-    if (base_configed_)
+    if (configured_)
     {
-        return TW::ALREADY_INITED;
+        return ThreadWrapperError::ALREADY_INITED;
     }
     instance_id_ = instance_id;
-    instance_name_.assign(thread_name.c_str());
-    base_configed_ = true;
+    instance_name_ = thread_name;
+    device_id_ = device_id;
+    configured_ = true;
 
-    return TW::OK;
-}
-
-
-ThreadWrapper::~ThreadWrapper()
-{
-    
+    return ThreadWrapperError::OK;
 }

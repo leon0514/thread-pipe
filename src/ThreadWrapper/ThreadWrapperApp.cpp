@@ -1,16 +1,34 @@
 #include "ThreadWrapper/ThreadWrapperApp.hpp"
-#include <unistd.h>
+#include <cstdio>
+#include <utility>
 
-namespace 
+ThreadWrapperApp& ThreadWrapperApp::get_instance()
 {
-    const uint32_t wait_interval = 10000;
-    const uint32_t thread_exit_retry = 3;
+    static ThreadWrapperApp app;
+    return app;
+}
+
+ThreadWrapperApp& get_thread_wrapper_app_instance()
+{
+    return ThreadWrapperApp::get_instance();
+}
+
+ThreadWrapperError send_message(int dest, int msg_id, std::shared_ptr<void> data)
+{
+    return ThreadWrapperApp::get_instance().send_message(dest, msg_id, std::move(data));
+}
+
+int get_thread_wrapper_id_by_name(const std::string& thread_name)
+{
+    return ThreadWrapperApp::get_instance().get_thread_wrapper_id_by_name(thread_name);
 }
 
 
-ThreadWrapperApp::ThreadWrapperApp():is_released_(false), wait_end_(false)
+ThreadWrapperApp::ThreadWrapperApp() 
 {
-    initialize();
+    auto main_thread_mgr = std::make_unique<ThreadWrapperMgr>(nullptr, "main", 1);
+    main_thread_mgr->set_status(ThreadWrapperStatus::RUNNING);
+    thread_mgr_list_.push_back(std::move(main_thread_mgr));
 }
 
 ThreadWrapperApp::~ThreadWrapperApp()
@@ -18,217 +36,136 @@ ThreadWrapperApp::~ThreadWrapperApp()
     release_threads();
 }
 
-
-ThreadWrapperError ThreadWrapperApp::initialize()
-{
-    const uint32_t msg_queue_size = 256;
-    ThreadWrapperMgr* th_mgr = new ThreadWrapperMgr(nullptr, "main", msg_queue_size);
-    thread_wrapper_mgr_list_.push_back(th_mgr);
-    th_mgr->set_status(THREAD_RUNNING);
-    return TW::OK;
-}
-
 ThreadWrapperError ThreadWrapperApp::start(std::vector<ThreadWrapperParam>& thread_param_list)
 {
-    for (size_t i = 0; i < thread_param_list.size(); i++) {
+    for (auto& params : thread_param_list) 
+    {
         int instance_id = create_thread_wrapper_mgr(
-            thread_param_list[i].thread_instance,
-            thread_param_list[i].thread_instance_name,
-            thread_param_list[i].device_id,
-            thread_param_list[i].queue_size);
+            std::move(params.thread_instance),
+            params.thread_instance_name,
+            params.device_id,
+            params.queue_size);
+
         if (instance_id == INVALID_INSTANCE_ID) 
         {
-            printf("Create thread_wrapper_mgr failed");
-            return TW::ERROR;
+            printf("错误: 创建线程管理器 '%s' 失败。请检查线程名是否重复。\n", params.thread_instance_name.c_str());
+            release_threads();
+            return ThreadWrapperError::ERROR;
         }
-        thread_param_list[i].thread_instance_id = instance_id;
-    }
-    // Note:The instance id must generate first, then create thread,
-    // for the user thread get other thread instance id in Init function
-    for (size_t i = 0; i < thread_param_list.size(); i++) 
-    {
-        thread_wrapper_mgr_list_[thread_param_list[i].thread_instance_id]->create_thread();
+        params.thread_instance_id = instance_id;
     }
 
-    for (size_t i = 0; i < thread_param_list.size(); i++) 
+    for (size_t i = MAIN_THREAD_ID + 1; i < thread_mgr_list_.size(); ++i) 
     {
-        int instance_id = thread_param_list[i].thread_instance_id;
-        ThreadWrapperError ret = thread_wrapper_mgr_list_[instance_id]->wait_thread_init_end();
-        if (ret != TW::OK) 
+        thread_mgr_list_[i]->start_thread();
+    }
+
+    for (size_t i = MAIN_THREAD_ID + 1; i < thread_mgr_list_.size(); ++i) 
+    {
+        if (thread_mgr_list_[i]->wait_for_init() != ThreadWrapperError::OK) 
         {
-            return ret;
+            printf("错误: 线程 '%s' 初始化失败。\n", thread_mgr_list_[i]->get_thread_name().c_str());
+            release_threads();
+            return ThreadWrapperError::START_THREAD_FAILED;
         }
     }
 
-    return TW::OK;
+    return ThreadWrapperError::OK;
 }
 
-int ThreadWrapperApp::create_thread_wrapper(ThreadWrapper* thread_instance, const std::string instance_name, int device_id, const uint32_t msg_queue_size)
+void ThreadWrapperApp::stop()
 {
-    int instance_id = create_thread_wrapper_mgr(thread_instance, instance_name, device_id, msg_queue_size);
-    if (instance_id == INVALID_INSTANCE_ID) 
+    release_threads();
+}
+
+void ThreadWrapperApp::release_threads()
+{
+    // 仅向工作线程发送停止信号
+    for (size_t i = MAIN_THREAD_ID + 1; i < thread_mgr_list_.size(); ++i) 
     {
-        return INVALID_INSTANCE_ID;
+        if (thread_mgr_list_[i] && thread_mgr_list_[i]->get_status() == ThreadWrapperStatus::RUNNING) {
+            thread_mgr_list_[i]->set_status(ThreadWrapperStatus::EXITING);
+            // 优化：推送 nullptr 作为“毒丸”，以唤醒并终止线程
+            thread_mgr_list_[i]->push_message_to_queue(nullptr);
+        }
     }
 
-    thread_wrapper_mgr_list_[instance_id]->create_thread();
-    ThreadWrapperError ret = thread_wrapper_mgr_list_[instance_id]->wait_thread_init_end();
-    if (ret != TW::OK) 
+    // 等待所有工作线程执行完毕
+    for (size_t i = MAIN_THREAD_ID + 1; i < thread_mgr_list_.size(); ++i) 
     {
-        return INVALID_INSTANCE_ID;
+        if (thread_mgr_list_[i]) 
+        {
+            thread_mgr_list_[i]->join_thread();
+        }
     }
 
-    return instance_id;
+    // 清理资源，unique_ptr 会自动删除管理器对象
+    thread_mgr_list_.clear();
 }
 
 int ThreadWrapperApp::create_thread_wrapper_mgr(
-    ThreadWrapper* thread_instance, const std::string& instance_name, int device_id, const uint32_t msg_queue_size)
+    std::unique_ptr<ThreadWrapper> thread_instance, const std::string& instance_name, int device_id, uint32_t msg_queue_size)
 {
-    if (!check_thread_name_unique(instance_name)) 
+    if (!thread_instance || !is_name_unique(instance_name)) 
     {
         return INVALID_INSTANCE_ID;
     }
 
-    int instance_id = thread_wrapper_mgr_list_.size();
-    ThreadWrapperError ret = thread_instance->base_config(instance_id, instance_name, device_id);
-    if (ret != TW::OK) 
+    int instance_id = thread_mgr_list_.size();
+    if (thread_instance->configure(instance_id, instance_name, device_id) != ThreadWrapperError::OK) 
     {
         return INVALID_INSTANCE_ID;
     }
 
-    ThreadWrapperMgr* th_mgr = new ThreadWrapperMgr(thread_instance, instance_name, msg_queue_size);
-    thread_wrapper_mgr_list_.push_back(th_mgr);
+    auto th_mgr = std::make_unique<ThreadWrapperMgr>(std::move(thread_instance), instance_name, msg_queue_size);
+    thread_mgr_list_.push_back(std::move(th_mgr));
 
     return instance_id;
 }
 
-bool ThreadWrapperApp::check_thread_name_unique(const std::string& thread_name)
+bool ThreadWrapperApp::is_name_unique(const std::string& thread_name) const
 {
-    if (thread_name.size() == 0) {
+    if (thread_name.empty()) {
         return false;
     }
-
-    for (size_t i = 0; i < thread_wrapper_mgr_list_.size(); i++) 
+    for (const auto& mgr : thread_mgr_list_) 
     {
-        if (thread_name == thread_wrapper_mgr_list_[i]->get_thread_name()) 
+        if (mgr && mgr->get_thread_name() == thread_name) 
         {
             return false;
         }
     }
-
     return true;
 }
 
 
-void ThreadWrapperApp::release_threads()
-{
-    if (is_released_) return;
-    thread_wrapper_mgr_list_[g_main_thread_id]->set_status(THREAD_EXITED);
-
-    for (uint32_t i = 1; i < thread_wrapper_mgr_list_.size(); i++) 
-    {
-        if ((thread_wrapper_mgr_list_[i] != nullptr) &&
-            (thread_wrapper_mgr_list_[i]->get_status() == THREAD_RUNNING))
-            thread_wrapper_mgr_list_[i]->set_status(THREAD_EXITING);
-    }
-
-    int retry = thread_exit_retry;
-    while (retry >= 0) 
-    {
-        bool exit_finish = true;
-        for (uint32_t i = 0; i < thread_wrapper_mgr_list_.size(); i++) 
-        {
-            if (thread_wrapper_mgr_list_[i] == nullptr)
-            {
-                continue;
-            }
-            if (thread_wrapper_mgr_list_[i]->get_status() > THREAD_EXITING) 
-            {
-                delete thread_wrapper_mgr_list_[i];
-                thread_wrapper_mgr_list_[i] = nullptr;
-            } 
-            else 
-            {
-                exit_finish = false;
-            }
-        }
-
-        if (exit_finish)
-            break;
-
-        sleep(1);
-        retry--;
-    }
-    is_released_ = true;
-}
-
-
-int ThreadWrapperApp::get_thread_wrapper_id_by_name(const std::string& thread_name)
+int ThreadWrapperApp::get_thread_wrapper_id_by_name(const std::string& thread_name) const
 {
     if (thread_name.empty()) 
     {
         return INVALID_INSTANCE_ID;
     }
-
-    for (uint32_t i = 0; i < thread_wrapper_mgr_list_.size(); i++) 
+    for (size_t i = 0; i < thread_mgr_list_.size(); ++i) 
     {
-        if (thread_wrapper_mgr_list_[i]->get_thread_name() == thread_name) 
+        if (thread_mgr_list_[i] && thread_mgr_list_[i]->get_thread_name() == thread_name) 
         {
-            return i;
+            return static_cast<int>(i);
         }
     }
-    
     return INVALID_INSTANCE_ID;
 }
 
-ThreadWrapperError ThreadWrapperApp::send_message(int dest, int msg_id, std::shared_ptr<void> data)
+ThreadWrapperError ThreadWrapperApp::send_message(int dest_id, int msg_id, std::shared_ptr<void> data)
 {
-    if ((uint32_t)dest > thread_wrapper_mgr_list_.size()) 
+    if (dest_id <= 0 || static_cast<size_t>(dest_id) >= thread_mgr_list_.size()) 
     {
-        return TW::ERROR_DEST_INVALID;
+        return ThreadWrapperError::ERROR_DEST_INVALID;
     }
 
-    std::shared_ptr<ThreadWrapperMessage> p_message = std::make_shared<ThreadWrapperMessage>();
-    p_message->dest = dest;
+    auto p_message = std::make_shared<ThreadWrapperMessage>();
+    p_message->dest = dest_id;
     p_message->msg_id = msg_id;
-    p_message->data = data;
+    p_message->data = std::move(data);
 
-    return thread_wrapper_mgr_list_[dest]->push_message_to_queue(p_message);
-}
-
-void ThreadWrapperApp::wait()
-{
-    while (true) 
-    {
-        usleep(wait_interval);
-        if (wait_end_) break;
-    }
-    thread_wrapper_mgr_list_[g_main_thread_id]->set_status(THREAD_EXITED);
-}
-
-
-ThreadWrapperApp& create_thread_wrapper_app_instance()
-{
-    return ThreadWrapperApp::get_app_instance();
-}
-
-
-ThreadWrapperApp& get_thread_wrapper_app_instance()
-{
-    return ThreadWrapperApp::get_app_instance();
-}
-
-
-ThreadWrapperError send_message(int dest, int msg_id, std::shared_ptr<void> data)
-{
-    ThreadWrapperApp& app = ThreadWrapperApp::get_app_instance();
-    return app.send_message(dest, msg_id, data);
-
-}
-
-
-int get_thread_wrapper_id_by_name(const std::string& thread_name)
-{
-    ThreadWrapperApp& app = ThreadWrapperApp::get_app_instance();
-    return app.get_thread_wrapper_id_by_name(thread_name);
+    return thread_mgr_list_[dest_id]->push_message_to_queue(p_message);
 }

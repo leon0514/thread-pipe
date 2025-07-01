@@ -22,14 +22,14 @@ public:
         {
             case MSG_ADD:
             {
-                printf("TestThread1 add message value + 1\n");
+                // printf("TestThread1 add message value + 1\n");
                 auto msg = std::static_pointer_cast<Message>(data);
                 msg->value += 1;
                 MsgSend(msg);
                 break;
             }
             default:
-                printf("TestThread1 thread ignore msg %d\n", msg_id);
+                // printf("TestThread1 thread ignore msg %d\n", msg_id);
                 break;
         }
         return 0;
