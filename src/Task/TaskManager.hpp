@@ -4,52 +4,57 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 #include <memory>
-#include "ThreadWrapper/ThreadWrapperApp.hpp" // Needs ThreadWrapperParam
+#include <mutex>
+#include "ThreadWrapper/ThreadWrapperApp.hpp"
 
-// A structure to hold information about a running task.
-struct TaskInfo {
+// Represents a thread in the global pool, with its reference count.
+struct PooledThreadInfo {
+    int id = INVALID_INSTANCE_ID;
     std::string name;
-    std::vector<int> thread_ids;
+    int reference_count = 0;
 };
 
 class TaskManager {
 public:
-    // Get the singleton instance
     static TaskManager& get_instance();
 
     TaskManager(const TaskManager&) = delete;
     TaskManager& operator=(const TaskManager&) = delete;
 
     /**
-     * @brief Creates and starts a new task composed of multiple threads.
+     * @brief Creates or updates a task, associating it with a set of threads.
+     * This is the core function for thread reuse.
      * @param task_name A unique name for the task.
-     * @param thread_params A list of parameters for each thread in the task.
-     * @return true on success, false if the task name already exists or creation fails.
+     * @param thread_params A list of parameters for threads this task needs.
+     *        If a thread with the same name already exists, it will be reused.
+     *        If not, it will be created.
+     * @return true on success.
      */
     bool create_task(const std::string& task_name, std::vector<ThreadWrapperParam>& thread_params);
 
     /**
-     * @brief Stops a running task by its name, shutting down all its associated threads.
+     * @brief Stops a task. This decrements the reference count of associated threads.
+     * A thread is only truly stopped if its reference count drops to zero.
      * @param task_name The name of the task to stop.
      * @return true on success, false if the task is not found.
      */
     bool stop_task(const std::string& task_name);
 
-    /**
-     * @brief Checks if a task with the given name exists.
-     */
-    bool task_exists(const std::string& task_name) const;
-
 private:
-    TaskManager(); // Private constructor for singleton
-    ~TaskManager(); // Destructor to clean up any remaining tasks
+    TaskManager();
+    ~TaskManager();
 
-    std::map<std::string, TaskInfo> running_tasks_;
-    mutable std::mutex task_mutex_; // To protect access to the running_tasks_ map
+    // The global pool of all active threads, mapped by their unique name.
+    std::map<std::string, PooledThreadInfo> thread_pool_;
+
+    // Maps a task name to the set of thread names it uses.
+    std::map<std::string, std::set<std::string>> running_tasks_;
+
+    mutable std::mutex mtx_; // A single mutex to protect both maps for simplicity.
 };
 
-// Global accessor function for convenience
 inline TaskManager& get_task_manager_instance() {
     return TaskManager::get_instance();
 }
